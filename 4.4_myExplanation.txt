@@ -1,0 +1,611 @@
+scopes of beans:
+
+-------flow/lifecycle of bean---
+first bean will be initialized using constructor
+then check for any dependencies, if found then resolve them first
+then post constructor
+then finish the reset of task of bean
+then pre destructor
+then destruction of bean
+
+```````````````````````````````````````````````````````````````````````````````````````````````
+-------------
+##############Singleton scope:
+--> bean will be initialized only once in on IOC container,
+   then same bean will be used everywhere
+
+--> default scope is singleton, but if you want to specify, you can use
+    @Scope("singleton")
+        or
+    @Scope(value = ConfigurableBeanFactory.SCOPE_SINGLETON)
+--> singleton bean are eagerly initialized(as soon as app starts)
+example:
+----------
+package com.antim.udemySh.service;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
+//@Scope("singleton")
+//@Scope(value = ConfigurableBeanFactory.SCOPE_SINGLETON)
+@Component
+public class User {
+    public User(){
+        System.out.println("User initialized ");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct User initialized: "+this.hashCode());
+    }
+}
+
+--------------
+package com.antim.udemySh.service;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+@Component
+public class Test {
+//    injecting user bean
+    @Autowired
+    User user;
+
+    public Test(){
+        System.out.println("Test initialized ");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct Test initialized: "+user.hashCode());
+    }
+}
+---------------
+package com.antim.udemySh.service;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+@Component
+public class Order {
+//    injecting user bean
+    @Autowired
+    User user;
+
+    public Order(){
+        System.out.println("Oder initialized");
+    }
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct Oder initialized: "+user.hashCode());
+    }
+}
+-----------------
+output
+User initialized
+PostConstruct User initialized: 1796911920
+Oder initialized
+PostConstruct Oder initialized: 1796911920
+Test initialized
+PostConstruct Test initialized: 1796911920
+
+-----
+note: the hash code of User bean is same every time. that shows user bean is created only once
+
+```````````````````````````````````````````````````````````````````````````````````````````````
+##############Prototype scope:
+--> Each time new obj is created
+--> it is lazy initialized, obj will be created only when required
+
+-------
+package com.antim.udemySh.service;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
+@Scope("prototype")
+@Component
+public class User {
+    public User(){
+        System.out.println("User initialized ");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct User initialized: "+this.hashCode());
+    }
+}
+-------
+package com.antim.udemySh.service;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
+@Component
+@Scope("prototype")
+public class Test {
+//    injecting user bean
+    @Autowired
+    User user;
+
+    @Autowired
+    Order order;
+
+    public Test(){
+        System.out.println("Test initialized ");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct Test initialized user: "+user.hashCode());
+        System.out.println("PostConstruct Test initialized order: "+order.hashCode());
+    }
+}
+---------
+package com.antim.udemySh.service;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
+@Scope("singleton")
+@Component
+public class Order {
+//    injecting user bean
+    @Autowired
+    User user;
+
+    public Order(){
+        System.out.println("Oder initialized");
+    }
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct Oder initialized: "+user.hashCode());
+    }
+}
+------------
+output
+
+User initialized
+PostConstruct User initialized: 1134234005
+Oder initialized
+User initialized
+PostConstruct User initialized: 1245538270
+PostConstruct Oder initialized: 1245538270
+
+->SB searched for User (as it is annotated with @Component,eligible for IOC)
+->found User, but it is prototype(lazy initialized), skip it for now
+->found test, same prototype(lazy initialized), skip it for now
+->found Order, singleton(eager), create bean, initialize it, has dependency
+    on     @Autowired User user; so create bean for it
+
+    user initialized, check dependency, has no dependency, so post construction called
+-> now all dependencies of order resolved, post constructor of order executed
+-> test bean was not required by anyone so won't print/execute
+----> note, every time new bean/obj is created for USER as it is of prototype scope
+
+```````````````````````````````````````````````````````````````````````````````````````````````
+##############Request scope:
+--> new obj created for each HTTP request
+--> lazy initialized
+
+-----
+package com.antim.udemySh.controller;
+import com.antim.udemySh.service.Order;
+import com.antim.udemySh.service.User;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@Scope("request")
+@RequestMapping("hi")
+public class UdemyController {
+
+    @Autowired
+    User user;
+
+    @Autowired
+    Order order;
+
+    public UdemyController(){
+        System.out.println("UdemyController initialized");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct UdemyController initialized: "+user.hashCode());
+    }
+
+    @GetMapping("/hello")
+    public String sayHello(){
+        return "Hello";
+    }
+    @GetMapping("bean")
+    public  String bean(){
+        return "Bean";
+    }
+}
+------------
+package com.antim.udemySh.service;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
+@Scope("prototype")
+@Component
+public class Order {
+
+    @Autowired
+    User user;
+
+    public Order(){
+        System.out.println("Oder initialized");
+    }
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct Oder initialized: "+user.hashCode());
+    }
+}
+-------------
+package com.antim.udemySh.service;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
+@Scope("request")
+@Component
+public class User {
+    public User(){
+        System.out.println("User initialized ");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct User initialized: "+this.hashCode());
+    }
+}
+---------
+ouput
+
+--> IOC will look for all beans & try to create them
+--> UdemyController,User {both request scope} & Order (prototype scope) are lazy initialized
+----> so no obj will be created at app startup
+---->as soon as i hit: http://localhost:8080/hi/hello
+i get this as output
+
+UdemyController initialized
+User initialized
+PostConstruct User initialized: 434522996
+Oder initialized
+PostConstruct Oder initialized: 434522996
+PostConstruct UdemyController initialized: 434522996
+
+
+how:
+as I hit: http://localhost:8080/hi/hello, it required UdemyController bean
+so, it will be created, initialized then dependencies will be checked
+found user and Order dependency, goes to resolve them
+
+goes to user first, initialize it as it has no dependencies it will go to post contructor
+then goes to Order,it will initialize &  it has dependencies  @Autowired User user; so create check if User bean exists
+if yes then use it, it won't create new bean every time
+
+now when i hit again that api, new bean will be created for "request scope"
+
+User initialized
+PostConstruct User initialized: 1043091487
+Oder initialized
+PostConstruct Oder initialized: 1043091487
+PostConstruct UdemyController initialized: 1043091487
+
+----------problem----------
+suppose UdemyController is singleton & User is request scope
+now
+
+now, UdemyController is singleton, eager initialized then it will try to create its bean
+initialize the user, now check for dependency, it has on User
+it will try to create User bean, but it has request scope
+
+------
+package com.antim.udemySh.controller;
+import com.antim.udemySh.service.Order;
+import com.antim.udemySh.service.User;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@Scope("singleton")
+@RequestMapping("hi")
+public class UdemyController {
+
+    @Autowired
+    User user;
+
+    @Autowired
+    Order order;
+
+    public UdemyController(){
+        System.out.println("UdemyController initialized");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct UdemyController initialized: "+user.hashCode());
+    }
+
+    @GetMapping("/hello")
+    public String sayHello(){
+        return "Hello";
+    }
+    @GetMapping("bean")
+    public  String bean(){
+        return "Bean";
+    }
+}
+-----
+package com.antim.udemySh.service;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
+
+@Scope("request")
+@Component
+public class User {
+    public User(){
+        System.out.println("User initialized ");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct User initialized: "+this.hashCode());
+    }
+}
+
+----------
+so we get the error:
+Error creating bean with name 'udemyController': Unsatisfied dependency expressed through field 'user': Error creating bean with name 'user': Scope 'request' is not active for the current thread; consider defining a scoped proxy for this bean if you intend to refer to it from a singleton
+as User is having request scope, so it will not initialized unitl we fire http request, hence UdemyController cant solve the dependency
+
+-----------solution----
+create proxy object for USER, even though there is not bean for it, create dummy obj for time being
+
+
+package com.antim.udemySh.service;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Scope;
+import org.springframework.context.annotation.ScopedProxyMode;
+import org.springframework.stereotype.Component;
+
+//###solution
+
+-------
+package com.antim.udemySh.controller;
+import com.antim.udemySh.service.Order;
+import com.antim.udemySh.service.User;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@Scope("singleton")
+@RequestMapping("hi")
+public class UdemyController {
+
+    @Autowired
+    User user;
+
+    @Autowired
+    Order order;
+
+    public UdemyController(){
+        System.out.println("UdemyController initialized");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct UdemyController initialized: "+user.hashCode());
+    }
+
+    @GetMapping("/hello")
+    public String sayHello(){
+        user.doSomething();
+        return "Hello" +user.hashCode();
+    }
+    @GetMapping("bean")
+    public  String bean(){
+        return "Bean";
+    }
+}
+------------
+
+package com.antim.udemySh.service;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Scope;
+import org.springframework.context.annotation.ScopedProxyMode;
+import org.springframework.stereotype.Component;
+
+@Scope(value = "request", proxyMode = ScopedProxyMode.TARGET_CLASS)
+@Component
+public class User {
+    public User(){
+        System.out.println("User initialized ");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct User initialized: "+this.hashCode());
+    }
+
+//we need to do something else proxy obj will invoke
+    public void doSomething() {
+        System.out.println("Inside User.doSomething() for hash: " + this.hashCode());
+    }
+
+}
+
+----------
+//output
+
+UdemyController initialized
+Oder initialized
+PostConstruct Oder initialized: -1133574266
+PostConstruct UdemyController initialized: -1133574266
+UdemyService initialized: 104591994
+
+
+now dependency solved,
+
+now, UdemyController is singleton, eager initialized then it will try to create its bean
+initialize the user, now check for dependency, it has on User
+it will try to create User bean, but it has request scope with proxy obj
+so it will create a dummy obj but User bean is not created yet.
+
+now as soon as i hit the api http://localhost:8080/hi/hello, and call doSomething method, the actual bean of User got created
+
+```````````````````````````````````````````````````````````````````````````````````````````````
+##############session scope:
+--> new obj is created for each http session
+--> lazy initialized
+--> when user access any endpoint, session is created
+--> remains active, till it does not expire
+
+
+---
+package com.antim.udemySh.controller;
+import com.antim.udemySh.service.Order;
+import com.antim.udemySh.service.User;
+import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@Scope("session")
+@RequestMapping("hi")
+public class UdemyController {
+
+    @Autowired
+    User user;
+
+    @Autowired
+    Order order;
+
+    public UdemyController(){
+        System.out.println("UdemyController initialized");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct UdemyController initialized: "+user.hashCode());
+    }
+
+    @GetMapping("/hello")
+    public String sayHello(){
+        user.doSomething();
+        return "Hello" +user.hashCode();
+    }
+    @GetMapping("bean")
+    public  String bean(){
+        return "Bean";
+    }
+    @GetMapping("/logout")
+    public ResponseEntity<String> getUserDetails(HttpServletRequest request){
+        System.out.println("end of session");
+        HttpSession session = request.getSession();
+        session.invalidate();
+        return ResponseEntity.status(HttpStatus.OK).body("");
+    }
+}
+
+-------
+package com.antim.udemySh.service;
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.stereotype.Component;
+
+@Component
+public class User {
+    public User(){
+        System.out.println("User initialized ");
+    }
+
+    @PostConstruct
+    public void init(){
+        System.out.println("PostConstruct User initialized: "+this.hashCode());
+    }
+
+    public void doSomething() {
+        System.out.println("Inside User.doSomething() for hash: " + this.hashCode());
+    }
+
+}
+
+------------
+user bean created(singleton default), initialized, check for dependency,
+tries to resolve them, but order has session scope so print this only
+---
+output-->
+User initialized
+---
+now I hit api http://localhost:8080/hi/hello
+got this output-->
+
+UdemyController initialized
+Oder initialized
+PostConstruct Oder initialized: 1109504438
+PostConstruct UdemyController initialized: 1109504438
+Inside User.doSomething() for hash: 1109504438
+
+
+now no matter how many times I hit the api, same UdemyController bean will be used
+until new session created
+
+now i ended session and restarted it, see new obj/bean created
+
+UdemyController initialized
+Oder initialized
+PostConstruct Oder initialized: 237223846
+PostConstruct UdemyController initialized: 237223846
+end of session
+UdemyController initialized
+Oder initialized
+PostConstruct Oder initialized: 237223846
+PostConstruct UdemyController initialized: 237223846
+Inside User.doSomething() for hash: 237223846
+
+```````````````````````````````````````````````````````````````````````````````````````````````
+##############application scope:
+--> similar to singleton
+--> it says one object between multiple IOC, without application scope,
+    new obj/bean created per IOC
